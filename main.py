@@ -40,22 +40,28 @@ def txt_processing(upload_file):
         if line
     ])
     # with right:/
-    st.write(without_empty_lines)
-    return without_empty_lines
+    # st.write(without_empty_lines)
     # string_data = re.sub(re.compile("/\*.*?\*/", re.DOTALL),
     #                      "", string_data)  # remove all occurrences streamed comments (/*COMMENT */) from string
     # return string_data
+    return without_empty_lines
+
 
 
 def code_migratrion_main(text):
     pysparkcode = []
     chunks = split_text(text)
     t = prompt_generator(chunks)
-    for i,item in enumerate(t):
-        st.write(f'{i}/{len(t)}')
+    for i, item in enumerate(t):
+        print(f'{i}/{len(t)}')
+        with right:
+            st.write(f'Chunk {i} processing began out of {len(t)} chunks')
         python_code = get_completion(item, model="gpt-3.5-turbo")
         pysparkcode.append(python_code)
-    return t
+    converted_code = os.linesep.join([str(elem) for elem in pysparkcode])
+    with open("converted_code.txt", "w", encoding='utf-8') as f:
+        f.write(converted_code)
+    return converted_code
 
 
 if __name__ == '__main__':
@@ -104,10 +110,6 @@ if __name__ == '__main__':
         if uploaded_file is None:
             st.error('SAS code required!! Please upload a file.', icon="🚨")
         else:
-
-            # st.write(uploaded_file['name'])
-
-            # st.slider('Select a value')
             with right:
                 st.write('Text File Processing Began!')
                 with st.spinner('Wait for it...'):
@@ -122,9 +124,9 @@ if __name__ == '__main__':
                 with st.spinner('Wait for it...'):
                     pyspark_code = code_migratrion_main(lines)
                     st.write('Conversion Done')
-                    st.write(pyspark_code)
+                    # st.write(pyspark_code)
             with right:
-                with open('processing_code.txt') as f:
+                with open('converted_code.txt') as f:
                     # st.download_button('Download CSV', f)
                     st.download_button('Download Pyspark File',
                                        f,
