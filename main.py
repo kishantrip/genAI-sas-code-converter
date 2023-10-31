@@ -53,9 +53,9 @@ def code_migratrion_main(text):
     chunks = split_text(text)
     t = prompt_generator(chunks)
     for i, item in enumerate(t):
-        print(f'{i}/{len(t)}')
+        print(f'{i+1}/{len(t)}')
         with right:
-            st.write(f'Chunk {i} processing began out of {len(t)} chunks')
+            st.write(f'Chunk {i+1} processing began out of {len(t)} chunks')
         python_code = get_completion(item, model="gpt-3.5-turbo")
         pysparkcode.append(python_code)
     converted_code = os.linesep.join([str(elem) for elem in pysparkcode])
@@ -124,7 +124,7 @@ if __name__ == '__main__':
                 with st.spinner('Wait for it...'):
                     pyspark_code = code_migratrion_main(lines)
                     st.write('Conversion Done')
-                    # st.write(pyspark_code)
+            st.write(pyspark_code)
             with right:
                 with open('converted_code.txt') as f:
                     # st.download_button('Download CSV', f)
