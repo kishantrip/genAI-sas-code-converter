@@ -6,6 +6,7 @@ from PIL import Image
 from io import StringIO
 import re
 import os
+from code_migration import split_text, prompt_generator, get_completion
 
 
 im = Image.open('logo/IDFCFIRSTB.NS-6c6b4306.png')
@@ -44,6 +45,17 @@ def txt_processing(upload_file):
     # string_data = re.sub(re.compile("/\*.*?\*/", re.DOTALL),
     #                      "", string_data)  # remove all occurrences streamed comments (/*COMMENT */) from string
     # return string_data
+
+
+def code_migratrion_main(text):
+    pysparkcode = []
+    chunks = split_text(text)
+    t = prompt_generator(chunks)
+    for i,item in enumerate(t):
+        st.write(f'{i}/{len(t)}')
+        python_code = get_completion(item, model="gpt-3.5-turbo")
+        pysparkcode.append(python_code)
+    return t
 
 
 if __name__ == '__main__':
@@ -93,25 +105,24 @@ if __name__ == '__main__':
             st.error('SAS code required!! Please upload a file.', icon="🚨")
         else:
 
-            lines = txt_processing(uploaded_file)
-            # with left:
-            # st.write(lines)
-            with open("processing_code.txt", "w", encoding='utf-8') as file:
-                file.write(lines)
-
             # st.write(uploaded_file['name'])
 
             # st.slider('Select a value')
             with right:
                 st.write('Text File Processing Began!')
                 with st.spinner('Wait for it...'):
-                    time.sleep(5)
+                    lines = txt_processing(uploaded_file)
+                    # with left:
+                    # st.write(lines)
+                    with open("processing_code.txt", "w", encoding='utf-8') as file:
+                        file.write(lines)
                     st.write('Text Processing Completed')
 
                 st.write('Conversion Began!')
                 with st.spinner('Wait for it...'):
-                    time.sleep(5)
+                    pyspark_code = code_migratrion_main(lines)
                     st.write('Conversion Done')
+                    st.write(pyspark_code)
             with right:
                 with open('processing_code.txt') as f:
                     # st.download_button('Download CSV', f)
