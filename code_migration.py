@@ -1,13 +1,18 @@
 from langchain.llms import OpenAI
 import os
-import openai
-from dotenv import load_dotenv
+from openai import OpenAI
+from langchain.cache import SQLiteCache
+from langchain.globals import set_llm_cache
+import time
+# set_llm_cache(SQLiteCache(database_path=".langchain.db"))
+
+# from dotenv import load_dotenv
 from langchain.document_loaders import TextLoader
 import tiktoken
 import re
 
 # load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+OpenAI.api_key = os.getenv("OPENAI_API_KEY")
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -16,16 +21,17 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     return num_tokens
 
 def get_completion(prompt, model="gpt-3.5-turbo"):
+    llm_client = OpenAI()
     messages = [{"role": "user", "content": prompt}]
-    response = openai.ChatCompletion.create(
+    response = llm_client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=0,
     )
-    return response.choices[0].message["content"]
+    return response.choices[0].message.content
 
-def split_text(text):
-    max_chunk_size = 2000
+def split_text(text, max_chunk_size=2000):
+    # max_chunk_size = 2000
     chunks = []
     current_chunk = ""
     for sentence in text.split("run;"):
@@ -65,6 +71,7 @@ if __name__ == "__main__":
         t = prompt_generator(chunks)
         for i, item in enumerate(t):
             print(f'{i}/{len(t)}')
+
             python_code = get_completion(item, model="gpt-3.5-turbo")
             pysparkcode.append(python_code)
         converted_code = os.linesep.join([str(elem) for elem in pysparkcode])

@@ -3,10 +3,16 @@ import streamlit as st
 # import pandas as pd
 import time
 from PIL import Image
+from openai import OpenAI
 from io import StringIO
 import re
 import os
 from code_migration import split_text, prompt_generator, get_completion
+import openai
+import time
+from langchain.cache import SQLiteCache
+from langchain.globals import set_llm_cache
+set_llm_cache(SQLiteCache(database_path=".langchain2.db"))
 
 
 im = Image.open('logo/IDFCFIRSTB.NS-6c6b4306.png')
@@ -31,6 +37,22 @@ def click_button():
     st.session_state.clicked = True
 
 
+def smaller_chunk_size(item, pysparkcode, i):
+    tmp_chunks = split_text(item, 1200)
+    # t = prompt_generator(chunks)
+    tmp = prompt_generator(tmp_chunks)
+    for j, item1 in enumerate(tmp):
+        print(f'{j + 1}sub/{len(tmp)}total')
+        tmp_python_code = []
+        with right:
+            st.write(f'Chunk {i + 1} - {j + 1} processing began out of {len(tmp)} chunks')
+
+        python_code = get_completion(item1, model="gpt-3.5-turbo")
+        tmp_python_code.append(python_code)
+        pysparkcode.extend(tmp_python_code)
+    return pysparkcode
+
+
 def txt_processing(upload_file):
     string_data = StringIO(upload_file.getvalue().decode("utf-8")).read()
 
@@ -47,17 +69,29 @@ def txt_processing(upload_file):
     return without_empty_lines
 
 
-
 def code_migratrion_main(text):
     pysparkcode = []
-    chunks = split_text(text)
+    chunks = split_text(text, 2000)
     t = prompt_generator(chunks)
+    llm_client = OpenAI()
     for i, item in enumerate(t):
         print(f'{i+1}/{len(t)}')
         with right:
             st.write(f'Chunk {i+1} processing began out of {len(t)} chunks')
-        python_code = get_completion(item, model="gpt-3.5-turbo")
-        pysparkcode.append(python_code)
+        try:
+            python_code = get_completion(item, model="gpt-3.5-turbo")
+            pysparkcode.append(python_code)
+        except Exception as e:
+            print(e)
+            time.sleep(60)
+            pysparkcode = smaller_chunk_size(item, pysparkcode, i)
+        except Exception as e2:
+            print(f'Fail to convert chunk')
+            print(e2)
+            with left:
+                st.write(f'Chunk {i + 1} processing fail of {len(t)} chunks')
+
+
     converted_code = os.linesep.join([str(elem) for elem in pysparkcode])
     with open("converted_code.txt", "w", encoding='utf-8') as f:
         f.write(converted_code)

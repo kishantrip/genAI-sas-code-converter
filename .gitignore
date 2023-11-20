@@ -2,3 +2,8 @@ processing_code.txt
 .idea
 .idea/*
 converted_code.txt
+venv
+.langchain.db
+processing_code.txt
+__pycache__
+__pycache__/*
