@@ -1,40 +1,47 @@
-import pandas as pd
 import streamlit as st
-# import pandas as pd
-import time
 from PIL import Image
-from openai import OpenAI
-from io import StringIO
-import re
-import os
 from code_migration import split_text, prompt_generator, get_completion
 import openai
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts.chat import ChatPromptTemplate
+from langchain.schema.output_parser import StrOutputParser
 import time
-from langchain.cache import SQLiteCache
+import os
+from io import StringIO
+import re
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.cache import InMemoryCache
+from langchain_llm import chunk_generalize_checking_and_hitting
 from langchain.globals import set_llm_cache
-set_llm_cache(SQLiteCache(database_path=".langchain2.db"))
 
+set_llm_cache(InMemoryCache())
 
 im = Image.open('logo/IDFCFIRSTB.NS-6c6b4306.png')
+
 
 def remove_comments(string):
     pattern = r"(\".*?(?<!\\)\"|\'.*?(?<!\\)\')|(/\*.*?\*/|//[^\r\n]*$)"
     # first group captures quoted strings (double or single)
     # second group captures comments (//single-line or /* multi-line */)
-    regex = re.compile(pattern, re.MULTILINE|re.DOTALL)
+    regex = re.compile(pattern, re.MULTILINE | re.DOTALL)
 
     def _replacer(match):
         # if the 2nd group (capturing comments) is not None,
         # it means we have captured a non-quoted (real) comment string.
         if match.group(2) is not None:
             return ""  # so we will return empty to remove the comment
-        else: # otherwise, we will return the 1st group
-            return match.group(1) # captured quoted-string
+        else:  # otherwise, we will return the 1st group
+            return match.group(1)  # captured quoted-string
+
     return regex.sub(_replacer, string)
 
 
 def click_button():
     st.session_state.clicked = True
+
+def refresh_button():
+    st.session_state.clicked = False
+    # st.stop()
 
 
 def smaller_chunk_size(item, pysparkcode, i):
@@ -69,32 +76,131 @@ def txt_processing(upload_file):
     return without_empty_lines
 
 
-def code_migratrion_main(text):
-    pysparkcode = []
-    chunks = split_text(text, 2000)
-    t = prompt_generator(chunks)
-    llm_client = OpenAI()
-    for i, item in enumerate(t):
-        print(f'{i+1}/{len(t)}')
+def code_migratrion_main(processed_code, max_chunk):
+    template = """You are expert in converting sas code to pyspark code. All condition should be coded nothing to be 
+    skipped Code is long so will be given in multiple parts which will be delimited with triple backticks. Create 
+    spark session only in part1 of the code and skip for rest all parts."""
+
+    human_template = "{code}"
+
+    chat_prompt = ChatPromptTemplate.from_messages([
+        ("system", template),
+        ("human", human_template),
+    ])
+
+    model = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.0, request_timeout=240,
+                       max_retries=0, cache=True)
+    model2 = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.0, request_timeout=360,
+                        max_retries=0, cache=True)
+
+    chain = chat_prompt | model | StrOutputParser()
+
+    regex_pat = re.compile(r'RUN;', flags=re.IGNORECASE)
+    processed_code = re.sub(regex_pat, '**splitpoint**', processed_code)
+
+    regex_pat = re.compile(r'QUIT;', flags=re.IGNORECASE)
+    processed_code = re.sub(regex_pat, '**splitpoint**', processed_code)
+
+    bb = CharacterTextSplitter(separator='**splitpoint**',
+                               chunk_size=max_chunk,
+                               chunk_overlap=0)
+
+    code_chunk = bb.split_text(processed_code)
+
+    code_chunk = [item.replace('**splitpoint**', 'run;') for item in code_chunk]
+
+    prompts = [{"code": f'SAS Code Part{i + 1}: ```{item}```'} for i, item in enumerate(code_chunk)]
+
+    open("converted_code.txt", "w+", encoding='utf-8')
+    open("converted_code_sas.txt", "w+", encoding='utf-8')
+
+    # print(len(prompts))
+    range_loop = (len(prompts) / 2)
+    if range_loop % 2 != 0:
+        range_loop = int(range_loop) + 1
+    else:
+        range_loop = range_loop
+    with right:
+        st.write(f'Total Batch to process {range_loop}')
+
+    t_0 = time.time()
+    for i in range(range_loop):
         with right:
-            st.write(f'Chunk {i+1} processing began out of {len(t)} chunks')
+            st.write(f'Chunk {i+1} processing began out of {range_loop} chunk. {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())}')
         try:
-            python_code = get_completion(item, model="gpt-3.5-turbo")
-            pysparkcode.append(python_code)
+            print(i * 2, (i * 2) + 2)
+            pyspark_code_tmp = chain.batch(prompts[i * 2: (i * 2) + 2])
+            converted_code = os.linesep.join([str(elem) for elem in pyspark_code_tmp])
+            with open("converted_code.txt", "a", encoding='utf-8') as f_py:
+                f_py.write(converted_code)
+            with open("converted_code_sas.txt", "a", encoding='utf-8') as f_sas:
+                converted_code_sas = os.linesep.join(
+                    [str(elem['code']) for elem in prompts[i * 2: (i * 2) + 2]]
+                )
+                f_sas.write(converted_code_sas)
+
+        except openai.APITimeoutError as e:
+            # ('SAS code required!! Please upload a file.')
+            st.error(e, icon="🚨")
+            print(i * 2, (i * 2) + 2)
+            chain2 = chat_prompt | model2 | StrOutputParser()
+            pyspark_code_converted = chain2.batch(prompts[i * 2: (i * 2) + 2])
+            converted_code = os.linesep.join([str(elem) for elem in pyspark_code_converted])
+            with open("converted_code.txt", "a", encoding='utf-8') as f_py:
+                f_py.write(converted_code)
+            with open("converted_code_sas.txt", "a", encoding='utf-8') as f_sas:
+                converted_code_sas = os.linesep.join(
+                    [str(elem['code']) for elem in prompts[i * 2: (i * 2) + 2]]
+                )
+                f_sas.write(converted_code_sas)
+
+        except openai.BadRequestError as e:
+            st.error(e, icon="🚨")
+            print(i * 2, (i * 2) + 2)
+            time.sleep(60)
+            converted_code = chunk_generalize_checking_and_hitting(prompts[i * 2: (i * 2) + 2],
+                                                                   max_chunk)
+            with open("converted_code.txt", "a", encoding='utf-8') as f_py:
+                f_py.write(converted_code)
+            with open("converted_code_sas.txt", "a", encoding='utf-8') as f_sas:
+                converted_code_sas = os.linesep.join(
+                    [str(elem['code']) for elem in prompts[i * 2: (i * 2) + 2]]
+                )
+                f_sas.write(converted_code_sas)
+        except openai.error.RateLimitError:
+            time.sleep(60)
+            pyspark_code_tmp = chain.batch(prompts[i * 2: (i * 2) + 2])
+            converted_code = os.linesep.join([str(elem) for elem in pyspark_code_tmp])
+            with open("converted_code.txt", "a", encoding='utf-8') as f_py:
+                f_py.write(converted_code)
+            with open("converted_code_sas.txt", "a", encoding='utf-8') as f_sas:
+                converted_code_sas = os.linesep.join(
+                    [str(elem['code']) for elem in prompts[i * 2: (i * 2) + 2]]
+                )
+                f_sas.write(converted_code_sas)
+
         except Exception as e:
             print(e)
-            time.sleep(60)
-            pysparkcode = smaller_chunk_size(item, pysparkcode, i)
-        except Exception as e2:
-            print(f'Fail to convert chunk')
-            print(e2)
-            with left:
-                st.write(f'Chunk {i + 1} processing fail of {len(t)} chunks')
-
-
-    converted_code = os.linesep.join([str(elem) for elem in pysparkcode])
-    with open("converted_code.txt", "w", encoding='utf-8') as f:
-        f.write(converted_code)
+            manual_conversion_text = '''\n\n\n########Manual conversion needed since context length is more than what 
+            model allows###########\n {} \n##########manual block ends#############\n\n\n'''
+            tmp = [manual_conversion_text.format(elem) for elem in prompts[i * 2: (i * 2) + 2]]
+            converted_code = os.linesep.join(tmp)
+            with open("converted_code.txt", "a", encoding='utf-8') as f_py:
+                f_py.write(converted_code)
+            with open("converted_code_sas.txt", "a", encoding='utf-8') as f_sas:
+                converted_code_sas = os.linesep.join(
+                    [str(elem['code']) for elem in prompts[i * 2: (i * 2) + 2]]
+                )
+                f_sas.write(converted_code_sas)
+        # Only needed if batch processing is done and RPM is exceeding
+        with left:
+            st.write(converted_code)
+        # if i % 2 == 0:
+        #     t_1 = time.time()
+        #     if (t_1 - t_0) < 60:
+        #         print(f"""put on sleep for matching RPM {(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))}""")
+        #         time.sleep(60 - (t_1 - t_0))
+        #         t_0 = t_1
     return converted_code
 
 
@@ -132,12 +238,14 @@ if __name__ == '__main__':
         # submit_button = st.button(label='Upload file')
         # tt = StringIO(lines)
 
-
     if 'clicked' not in st.session_state:
         st.session_state.clicked = False
 
     with right:
         st.button('Convert', on_click=click_button)
+
+    # with right:
+    #     st.button('Refresh', on_click=refresh_button)
 
     if st.session_state.clicked:
         # The message and nested widget will remain on the page
@@ -156,9 +264,9 @@ if __name__ == '__main__':
 
                 st.write('Conversion Began!')
                 with st.spinner('Wait for it...'):
-                    pyspark_code = code_migratrion_main(lines)
+                    pyspark_code = code_migratrion_main(lines, 2500)
                     st.write('Conversion Done')
-            st.write(pyspark_code)
+            # st.write(pyspark_code)
             with right:
                 with open('converted_code.txt') as f:
                     # st.download_button('Download CSV', f)
