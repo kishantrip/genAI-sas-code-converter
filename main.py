@@ -61,7 +61,7 @@ def txt_processing(upload_file):
     return without_empty_lines
 
 
-def code_migratrion_main(processed_code, max_chunk):
+def code_migration_main(processed_code, max_chunk):
     template = """You are expert in converting sas code to pyspark code. All condition should be coded nothing to be 
     skipped Code is long so will be given in multiple parts which will be delimited with triple backticks. Create 
     spark session only in part1 of the code and skip for rest all parts. Return converted code in triple backtick"""
@@ -108,11 +108,11 @@ def code_migratrion_main(processed_code, max_chunk):
     with right:
         st.write(f'Total Batch to process {range_loop}')
 
-    t_0 = time.time()
+    # t_0 = time.time()
     for i in range(range_loop):
+        t0 = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         with right:
-            st.write(
-                f'Chunk {i + 1} processing began out of {range_loop} chunk. {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())}')
+            st.write(f'Chunk {i + 1} processing began out of {range_loop} chunk. {t0}')
         try:
             print(i * 2, (i * 2) + 2)
             pyspark_code_tmp = chain.batch(prompts[i * 2: (i * 2) + 2])
@@ -127,7 +127,7 @@ def code_migratrion_main(processed_code, max_chunk):
 
         except openai.APITimeoutError as e:
             # ('SAS code required!! Please upload a file.')
-            st.error(e, icon="🚨")
+            st.error(f'{e}. Conversion attempting after increasing request timeout limit', icon="🚨")
             print(i * 2, (i * 2) + 2)
             chain2 = chat_prompt | model2 | StrOutputParser()
             pyspark_code_converted = chain2.batch(prompts[i * 2: (i * 2) + 2])
@@ -141,7 +141,7 @@ def code_migratrion_main(processed_code, max_chunk):
                 f_sas.write(converted_code_sas)
 
         except openai.BadRequestError as e:
-            st.error(e, icon="🚨")
+            st.error(f'{e}. Separating batch into manual vs auto', icon="🚨")
             print(i * 2, (i * 2) + 2)
             time.sleep(60)
             converted_code = chunk_generalize_checking_and_hitting(prompts[i * 2: (i * 2) + 2],
@@ -153,7 +153,8 @@ def code_migratrion_main(processed_code, max_chunk):
                     [str(elem['code']) for elem in prompts[i * 2: (i * 2) + 2]]
                 )
                 f_sas.write(converted_code_sas)
-        except openai.error.RateLimitError:
+        except openai.RateLimitError as e:
+            st.error(f'{e}. Putting in sleep for 60s', icon="🚨")
             time.sleep(60)
             pyspark_code_tmp = chain.batch(prompts[i * 2: (i * 2) + 2])
             converted_code = os.linesep.join([str(elem) for elem in pyspark_code_tmp])
@@ -166,6 +167,7 @@ def code_migratrion_main(processed_code, max_chunk):
                 f_sas.write(converted_code_sas)
 
         except Exception as e:
+            st.error(e, icon="🚨")
             print(e)
             manual_conversion_text = '''\n\n\n########Manual conversion needed since context length is more than what 
             model allows###########\n {} \n##########manual block ends#############\n\n\n'''
@@ -250,7 +252,7 @@ if __name__ == '__main__':
 
                 st.write('Conversion Began!')
                 with st.spinner('Wait for it...'):
-                    pyspark_code = code_migratrion_main(lines, 2500)
+                    pyspark_code = code_migration_main(lines, 2500)
                     st.write('Conversion Done')
             # st.write(pyspark_code)
             with right:
