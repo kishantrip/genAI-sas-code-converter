@@ -1,6 +1,5 @@
 import openai
 from langchain.chat_models import ChatOpenAI
-# from langchain.llms import OpenAI
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 import time

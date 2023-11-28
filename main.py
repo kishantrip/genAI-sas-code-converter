@@ -1,6 +1,6 @@
 import streamlit as st
 from PIL import Image
-from code_migration import split_text, prompt_generator, get_completion
+# from code_migration import split_text, prompt_generator, get_completion
 import openai
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts.chat import ChatPromptTemplate
@@ -39,25 +39,10 @@ def remove_comments(string):
 def click_button():
     st.session_state.clicked = True
 
+
 def refresh_button():
     st.session_state.clicked = False
     # st.stop()
-
-
-def smaller_chunk_size(item, pysparkcode, i):
-    tmp_chunks = split_text(item, 1200)
-    # t = prompt_generator(chunks)
-    tmp = prompt_generator(tmp_chunks)
-    for j, item1 in enumerate(tmp):
-        print(f'{j + 1}sub/{len(tmp)}total')
-        tmp_python_code = []
-        with right:
-            st.write(f'Chunk {i + 1} - {j + 1} processing began out of {len(tmp)} chunks')
-
-        python_code = get_completion(item1, model="gpt-3.5-turbo")
-        tmp_python_code.append(python_code)
-        pysparkcode.extend(tmp_python_code)
-    return pysparkcode
 
 
 def txt_processing(upload_file):
@@ -79,7 +64,7 @@ def txt_processing(upload_file):
 def code_migratrion_main(processed_code, max_chunk):
     template = """You are expert in converting sas code to pyspark code. All condition should be coded nothing to be 
     skipped Code is long so will be given in multiple parts which will be delimited with triple backticks. Create 
-    spark session only in part1 of the code and skip for rest all parts."""
+    spark session only in part1 of the code and skip for rest all parts. Return converted code in triple backtick"""
 
     human_template = "{code}"
 
@@ -126,7 +111,8 @@ def code_migratrion_main(processed_code, max_chunk):
     t_0 = time.time()
     for i in range(range_loop):
         with right:
-            st.write(f'Chunk {i+1} processing began out of {range_loop} chunk. {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())}')
+            st.write(
+                f'Chunk {i + 1} processing began out of {range_loop} chunk. {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())}')
         try:
             print(i * 2, (i * 2) + 2)
             pyspark_code_tmp = chain.batch(prompts[i * 2: (i * 2) + 2])
@@ -279,6 +265,5 @@ if __name__ == '__main__':
         #     st.error('SAS code required!! Please upload a file.', icon="🚨")
 
     st.session_state.clicked = False
-
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
